@@ -20,6 +20,7 @@ export default function Randomizer() {
   // Seed & roll index from URL for shareable builds
   const [seed, setSeed] = useState(() => params.get("seed") || randomSeed());
   const [roll, setRoll] = useState(() => Number(params.get("n") || 0));
+  const [chaos, setChaos] = useState(false); // toggle for extra randomness
   
 
   // Allowed categories (persist in localStorage)
@@ -53,9 +54,15 @@ const [toast, setToast] = useState("");
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allowedCats));
   }, [allowedCats]);
 
-  // Deterministic RNGs from seed + roll
-  const weaponRng = useMemo(() => rngFromSeed(`${seed}|${roll}|weapon`), [seed, roll]);
-  const buildRng  = useMemo(() => rngFromSeed(`${seed}|${roll}|build`),  [seed, roll]);
+// Deterministic RNGs from seed + roll unless chaos=true
+const weaponRng = useMemo(
+  () => chaos ? Math.random : rngFromSeed(`${seed}|${roll}|weapon`),
+  [seed, roll, chaos]
+);
+const buildRng = useMemo(
+  () => chaos ? Math.random : rngFromSeed(`${seed}|${roll}|build`),
+  [seed, roll, chaos]
+);
 
   // Helper to read category even if data has a typo (catergory)
   const getCat = (w) => (w.category || w.catergory || "").toString();
@@ -196,14 +203,16 @@ const [toast, setToast] = useState("");
           </div>
         </div>
       </div>
-      <button className="btn" onClick={saveCurrentBuild}>⭐ Save build</button>
-
+<button className={`badge ${chaos ? "on" : ""}`} onClick={()=>setChaos(v=>!v)}>
+  {chaos ? "🧨 Chaos ON" : "✨ Chaos OFF"}
+</button>
       {/* Big Randomize button */}
       <div style={{ textAlign: "center", margin: "20px 0" }}>
   <button className="big-randomize" onClick={rerollAll}>
     <span className="icon">🎲</span> Randomize
   </button>
 </div>
+
 
       {/* Main card with image + selected attachments only */}
       <div className="grid" style={{ gridTemplateColumns: "1.1fr .9fr", gap: 16 }}>
@@ -215,6 +224,7 @@ const [toast, setToast] = useState("");
               <span className={`badge ${pickedWeapon ? getCat(pickedWeapon) : ""}`}>
   {pickedWeapon ? getCat(pickedWeapon) : "—"}
 </span>
+<button className="btn" onClick={saveCurrentBuild}>⭐ Save build</button>
             </div>
             <button
               className={`badge ${weaponLocked ? "on" : ""}`}

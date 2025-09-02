@@ -1,36 +1,57 @@
-// Deterministic RNG helpers for shareable seeds.
-function hashToSeed(str) {
-  let h = 1779033703 ^ (str?.length || 0);
-  for (let i = 0; i < (str?.length || 0); i++) {
-    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
-    h = (h << 13) | (h >>> 19);
+// src/lib/rng.js
+
+// Fast string hash → 32-bit (xfnv1a)
+function xfnv1a(str) {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 16777619);
   }
-  return (h >>> 0);
+  return h >>> 0;
 }
+
+// Mulberry32 PRNG from 32-bit seed
 function mulberry32(a) {
   return function() {
-    let t = (a += 0x6D2B79F5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    a |= 0; a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t ^= t + Math.imul(t ^ t >>> 7, 61 | t);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
   };
 }
+
+// Create deterministic RNG from seed string
 export function rngFromSeed(seedStr) {
-  return mulberry32(hashToSeed(String(seedStr)));
+  const seed = xfnv1a(String(seedStr));
+  return mulberry32(seed);
 }
-export function pick(array, rnd) {
-  return array[Math.floor(rnd() * array.length)];
+
+// Crypto-strong seed (non-deterministic)
+export function randomSeed(bytes = 8) {
+  const a = new Uint8Array(bytes);
+  (crypto || window.crypto).getRandomValues(a);
+  return Array.from(a, b => b.toString(16).padStart(2, "0")).join("");
 }
-export function sample(array, k, rnd) {
-  const a = array.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(rnd() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
+
+// Uniform pick using RNG fn that returns [0,1)
+export function pick(arr, rng) {
+  if (!arr?.length) return null;
+  const i = Math.floor(rng() * arr.length);
+  return arr[i];
+}
+
+// Fisher–Yates shuffle (in-place, uses supplied RNG)
+export function shuffle(arr, rng) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
-  return a.slice(0, k);
+  return arr;
 }
-export function randomSeed() {
-  const b = new Uint32Array(3);
-  (crypto?.getRandomValues?.(b) ?? [Date.now(), Math.random()*1e9, performance.now()]);
-  return [...b].map(n => n.toString(36)).join("-");
+
+// Sample k unique items without bias
+export function sample(arr, k, rng) {
+  const a = arr.slice();
+  shuffle(a, rng);
+  return a.slice(0, Math.min(k, a.length));
 }

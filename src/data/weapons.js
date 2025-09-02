@@ -1,4 +1,4 @@
-export const CATEGORIES = ["AR","SMG","Battle Rifle" ,"LMG","Melee","Shotgun","MarksmanRifle","SniperRifle","Pistol","Launchers"];
+export const CATEGORIES = ["AR","SMG","BattleRifle" ,"LMG","Melee","Shotgun","MarksmanRifle","SniperRifle","Pistol","Launchers"];
 export const WEAPONS = [
   {
     name: "Chimera",
@@ -808,7 +808,7 @@ export const WEAPONS = [
   },
   {
     name: "Cronon Squall",
-    category: "Battle Rifle" ,
+    category: "BattleRifle" ,
     image: "/images/weapons/Cronen_Squall_Gunsmith_MWII.webp",
         //no (no leading "/")
     slots: {
@@ -826,7 +826,7 @@ export const WEAPONS = [
   },
   {
     name: "FTAC Recon",
-    category: "Battle Rifle" ,
+    category: "BattleRifle" ,
     image: "/images/weapons/FTac_Recon_Gunsmith_MWII.webp",
         //no (no leading "/")
     slots: {
@@ -843,7 +843,7 @@ export const WEAPONS = [
   },
   {
     name: "Lachmann-765",
-    category: "Battle Rifle" ,
+    category: "BattleRifle" ,
     image: "/images/weapons/Lachmann-762_Gunsmith_MWII.webp",
         //no (no leading "/")
     slots: {
@@ -860,7 +860,7 @@ export const WEAPONS = [
   },
   {
     name: "SO-14",
-    category: "Battle Rifle" ,
+    category: "BattleRifle" ,
     image: "/images/weapons/SO-14_Gunsmith_MWII.webp",
         //no (no leading "/")
     slots: {
@@ -878,7 +878,7 @@ export const WEAPONS = [
   },
   {
     name: "TAQ-V",
-    category: "Battle Rifle" ,
+    category: "BattleRifle" ,
     image: "/images/weapons/TAQ-V_Gunsmith_MWII.webp",
         //no (no leading "/")
     slots: {

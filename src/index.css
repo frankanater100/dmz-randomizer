@@ -9,13 +9,13 @@
   --bg-deep:#0b0f0b;
   --bg-olive:#111a12;
   --bg-haze:#2b342b;
-  --bg-dust:#b0982222;   /* dusty/embers specks, translucent */
+  --bg-dust:#b0982222;  /* dusty/embers specks, translucent */
 
   /* surfaces */
-  --bg: #0b0b0e;         /* page backdrop */
-  --bg-2:#0f1016;        /* card fill */
-  --panel:#161b16;       /* panel fill */
-  --border:#2b3230;      /* seams */
+  --bg:#0b0b0e;         /* page backdrop */
+  --bg-2:#0f1016;       /* card fill */
+  --panel:#161b16;      /* panel fill */
+  --border:#2b3230;     /* seams */
 
   /* text */
   --text:#e8ede8;
@@ -51,14 +51,11 @@ body{
   margin:0;
   color:var(--text);
   background-color: var(--bg); /* solid base */
-
-  /* layered washes: dust, haze, deep olive */
   background:
     radial-gradient(1200px 720px at 18% -8%, var(--bg-dust) 0%, transparent 60%),
     radial-gradient(900px 600px at 76% 18%, #9f93581a 0%, transparent 55%),
     radial-gradient(1400px 900px at 50% -6%, var(--bg-haze) 0%, var(--bg-olive) 58%, var(--bg-deep) 100%);
   background-attachment: fixed, fixed, fixed;
-
   font: 15px/1.5 "Inter", ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
   position: relative;
 }
@@ -89,7 +86,7 @@ body::before{
 .navlink{
   padding:8px 12px; border-radius:10px;
   border:1px solid var(--border); color:var(--muted);
-  transition:border-color .2s ease, color .2s ease
+  transition:border-color .2s ease, color .2s ease;
 }
 .navlink:hover, .navlink.active{ border-color:var(--accent); color:var(--text) }
 
@@ -118,7 +115,7 @@ body::before{
 
 .hr{ height:1px; background:var(--border); border:0 }
 
-/* --- Buttons & chips --- */
+/* --- Buttons --- */
 .btn{
   border:1px solid var(--border);
   background: var(--bg-2);
@@ -136,13 +133,32 @@ body::before{
   color:#041b10; border-color:transparent; box-shadow: var(--glow);
 }
 
-.badge{
-  font-size:12px; padding:4px 8px; border-radius:999px;
-  border:1px solid var(--border); color:var(--muted);
-  transition: border-color .2s ease, background-color .2s ease, color .2s ease;
+/* --- Badges (all: easier to read when inactive) --- */
+.badge {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  border: 1px solid var(--border);
+  color: var(--text);                 /* brighter by default */
+  padding: 6px 10px;                  /* larger touch area */
+  border-radius: 999px;
+  background: rgba(255,255,255,.04);  /* subtle fill */
+  cursor: pointer;
+  transition: color .15s ease, border-color .15s ease, background-color .15s ease, box-shadow .15s ease;
 }
-.badge.on{ background: var(--accent); color:#041b10; border-color:transparent }
+.badge:hover {
+  border-color: var(--accent);
+  background: rgba(255,255,255,.06);
+}
+.badge.on{
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #041b10;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0,0,0,.25);
+}
 
+/* keyboard chip */
 .kbd{
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size:12px; padding:2px 6px; border-radius:6px;
@@ -217,17 +233,19 @@ body::before{
 .big-randomize:hover{ transform:scale(1.05); box-shadow: 0 10px 24px rgba(0,0,0,.5) }
 .big-randomize .icon{ font-size:22px }
 
-/* --- Category badge colors (at a glance) --- */
+/* --- Category badge colors --- */
 .badge.AR{        background:#2d6a4f; color:#fff }
 .badge.SMG{       background:#1d3557; color:#fff }
-.badge.BR{        background:#6d597a; color:#fff }
+.badge.BattleRifle{        background:#6d597a; color:#fff }
 .badge.LMG{       background:#ff9f1c; color:#000 }
 .badge.Shotgun{   background:#d62828; color:#fff }
-.badge.MarksmanRifle{  background:#040404; color:#ffffff }
-.badge.SniperRifle{    background:#003049; color:#fff }
+.badge.Marksmen{          background:#8d99ae; color:#000 } /* if your data says 'Marksmen' */
+.badge.MarksmanRifle{     background:#8d99ae; color:#000 } /* alternate label */
+.badge.Sniper{            background:#003049; color:#fff }
+.badge.SniperRifle{       background:#003049; color:#fff } /* alternate label */
 .badge.Pistol{    background:#ffba08; color:#000 }
-.badge.Launchers{ background:#9d0208; color:#fff }
-.badge.Melee{     background:#606c38; color:#fff }
+.badge.Launchers{ background:#000000; color:#dc7d7d }
+.badge.Melee{     background:#006f4a; color:#fff }
 
 /* --- Inputs --- */
 input[type="text"]{
@@ -236,6 +254,55 @@ input[type="text"]{
 }
 .checkbox{ width:16px; height:16px; accent-color: var(--accent) }
 .copy{ font-size:12px; opacity:.85 }
+
+/* Pretty range slider (dark theme, WebKit + Firefox) */
+.range {
+  margin-top: 8px;
+}
+
+.range .labels {
+  display:flex; justify-content:space-between;
+  font-size:12px; color:var(--muted); margin-bottom:6px;
+}
+
+input[type="range"] {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: var(--border);        /* visible track */
+  border-radius: 999px;
+  outline: none;
+}
+
+/* WebKit thumb */
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: 0;
+  box-shadow: 0 0 0 2px #041b10 inset, 0 2px 8px rgba(0,0,0,.4);
+  cursor: pointer;
+  margin-top: -6px; /* centers on 6px track */
+}
+
+/* Firefox track + thumb */
+input[type="range"]::-moz-range-track {
+  height: 6px;
+  background: var(--border);
+  border-radius: 999px;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  border: none;
+  box-shadow: 0 0 0 2px #041b10 inset, 0 2px 8px rgba(0,0,0,.4);
+  cursor: pointer;
+}
+
+/* Active/hover states */
+input[type="range"]:hover { background: #3a423f; }
 
 /* --- Mobile FAB (sticky Randomize) --- */
 @media (max-width:780px){

@@ -2,31 +2,37 @@
 import { Routes, Route, NavLink } from "react-router-dom";
 import { Suspense, lazy } from "react";
 
-// 🔻 lazy-load pages (each becomes its own chunk)
-const Randomizer = lazy(() => import(/* webpackChunkName: "page-randomizer" */ "./pages/Randomizer.jsx"));
-const Weapons    = lazy(() => import(/* webpackChunkName: "page-weapons" */ "./pages/Weapons.jsx"));
-const Favorites  = lazy(() => import(/* webpackChunkName: "page-favorites" */ "./pages/Favorites.jsx"));
-// If you have NotFound.jsx:
-const NotFound   = lazy(() => import(/* webpackChunkName: "page-notfound" */ "./pages/NotFound.jsx"));
+const Randomizer = lazy(() => import("./pages/Randomizer.jsx"));
+const Weapons    = lazy(() => import("./pages/Weapons.jsx"));
+const Favorites  = lazy(() => import("./pages/Favorites.jsx"));
+const Updates    = lazy(() => import("./pages/Updates.jsx"));
+const NotFound   = lazy(() => import("./pages/NotFound.jsx"));
 
 export default function App(){
   return (
     <div className="app">
-      <div className="topbar">
-        <nav className="nav">
-          <NavLink className="navlink" to="/">Randomizer</NavLink>
-          <NavLink className="navlink" to="/weapons">Weapons</NavLink>
-          <NavLink className="navlink" to="/favorites">Favorites</NavLink>
+      <header className="topbar">
+        <nav className="nav" aria-label="Primary">
+          <div className="brand">
+            <img src="/images/dmz-logo-56.png" alt="DMZ Randomizer" className="logo" />
+            <span className="title label-caps">DMZ Randomizer</span>
+          </div>
+          <div className="links">
+            <NavLink className="navlink" to="/">Randomizer</NavLink>
+            <NavLink className="navlink" to="/weapons">Weapons</NavLink>
+            <NavLink className="navlink" to="/favorites">Favorites</NavLink>
+            <NavLink className="navlink" to="/updates">Updates</NavLink>
+          </div>
         </nav>
-      </div>
+      </header>
 
       <main className="container">
-        {/* A light, styled fallback while chunks load */}
         <Suspense fallback={<div className="panel">Loading…</div>}>
           <Routes>
             <Route path="/" element={<Randomizer />} />
             <Route path="/weapons" element={<Weapons />} />
             <Route path="/favorites" element={<Favorites />} />
+            <Route path="/updates" element={<Updates />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </Suspense>

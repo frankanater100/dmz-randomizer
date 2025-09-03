@@ -14,20 +14,20 @@ export default function App(){
       <header className="topbar">
         <nav className="nav" aria-label="Primary">
           <div className="brand">
-            <img src="/images/logo.png" alt="DMZ Randomizer" className="logo" />
-            <span className="title label-caps">DMZ Randomizer</span>
+            <img className="logo" src="/logo.png" alt="" />
+            <span className="title">DMZ Randomizer</span>
           </div>
           <div className="links">
-            <NavLink className="navlink" to="/">Randomizer</NavLink>
-            <NavLink className="navlink" to="/weapons">Weapons</NavLink>
-            <NavLink className="navlink" to="/favorites">Favorites</NavLink>
-            <NavLink className="navlink" to="/updates">Updates</NavLink>
+            <NavLink to="/"       className="navlink" end>Randomizer</NavLink>
+            <NavLink to="/weapons" className="navlink">Weapons</NavLink>
+            <NavLink to="/favorites" className="navlink">Favorites</NavLink>
+            <NavLink to="/updates"   className="navlink">Updates</NavLink>
           </div>
         </nav>
       </header>
 
-      <main className="container">
-        <Suspense fallback={<div className="panel">Loading…</div>}>
+      <main className="container" role="main">
+        <Suspense fallback={<div className="panel subtle">⚙️ Extracting intel…</div>}>
           <Routes>
             <Route path="/" element={<Randomizer />} />
             <Route path="/weapons" element={<Weapons />} />
@@ -38,7 +38,9 @@ export default function App(){
         </Suspense>
       </main>
 
-      <footer className="footer">DMZ Randomizer • beta</footer>
+      <footer className="footer">
+        DMZ Randomizer • <span className="subtle">beta build</span>
+      </footer>
     </div>
   );
 }

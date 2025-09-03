@@ -14,7 +14,7 @@ export default function App(){
       <header className="topbar">
         <nav className="nav" aria-label="Primary">
           <div className="brand">
-            <img src="/images/dmz-logo-56.png" alt="DMZ Randomizer" className="logo" />
+            <img src="/images/logo.png" alt="DMZ Randomizer" className="logo" />
             <span className="title label-caps">DMZ Randomizer</span>
           </div>
           <div className="links">

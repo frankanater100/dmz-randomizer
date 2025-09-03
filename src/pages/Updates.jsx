@@ -2,28 +2,21 @@
 import { useEffect, useState } from "react";
 
 export default function Updates() {
-  const [items, setItems] = useState(null);
+  // ----- updates from a static JSON file in /public -----
+  const [updates, setUpdates] = useState(null); // null = loading
   const [loadErr, setLoadErr] = useState("");
 
-  // suggestion form state
-  const [msg, setMsg] = useState("");
-  const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
-  const [ok, setOk] = useState(false);
-  const [err, setErr] = useState("");
-
-  // load updates.json (from /public)
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch(`/updates.json?ts=${Date.now()}`);
+        const res = await fetch("/updates.json?ts=" + Date.now());
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
-        if (alive) setItems(Array.isArray(data) ? data : []);
+        if (alive) setUpdates(Array.isArray(data) ? data : []);
       } catch {
         if (alive) {
-          setItems([]);
+          setUpdates([]);
           setLoadErr("Couldn’t load updates right now.");
         }
       }
@@ -31,18 +24,23 @@ export default function Updates() {
     return () => { alive = false; };
   }, []);
 
+  // ----- anonymous suggestions via Formspree -----
+  const [msg, setMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [sending, setSending] = useState(false);
+  const [ok, setOk] = useState(false);
+  const [err, setErr] = useState("");
+
   async function handleSubmit(e) {
     e.preventDefault();
     setSending(true);
     setErr("");
     try {
+      // ⬇️ replace with your own Formspree endpoint ID
       const res = await fetch("https://formspree.io/f/xqadydko", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message: msg,
-          email,
-        }),
+        body: JSON.stringify({ message: msg, email }),
       });
       if (!res.ok) throw new Error("Network error");
       setOk(true);
@@ -57,18 +55,23 @@ export default function Updates() {
 
   return (
     <div className="grid" style={{ gap: 16 }}>
+      {/* Updates list */}
       <div className="panel">
         <h2>Updates</h2>
-        {items === null && <div className="subtle">Loading updates…</div>}
-        {items !== null && loadErr && (
+
+        {updates === null && <div className="subtle">Loading updates…</div>}
+
+        {updates !== null && loadErr && (
           <div className="badge" style={{ borderColor: "#d66", color: "#ffdede" }}>{loadErr}</div>
         )}
-        {items !== null && !loadErr && items.length === 0 && (
+
+        {Array.isArray(updates) && updates.length === 0 && !loadErr && (
           <div className="subtle">No updates yet.</div>
         )}
-        {Array.isArray(items) && items.length > 0 && (
+
+        {Array.isArray(updates) && updates.length > 0 && (
           <div className="grid" style={{ gap: 12 }}>
-            {items.map((u, i) => (
+            {updates.map((u, i) => (
               <div className="card" key={`${u.date}-${i}`}>
                 <div className="row" style={{ justifyContent: "space-between" }}>
                   <div style={{ fontWeight: 700 }}>{u.title}</div>
@@ -81,8 +84,13 @@ export default function Updates() {
         )}
       </div>
 
+      {/* Anonymous suggestions */}
       <div className="panel">
         <h2>Anonymous suggestions</h2>
+        <p className="subtle" style={{ marginTop: -6 }}>
+          No login required. Leave your email if you want a reply (optional).
+        </p>
+
         <form onSubmit={handleSubmit}>
           <div className="grid" style={{ gap: 10 }}>
             <label className="subtle">Your message (required)</label>
@@ -113,7 +121,7 @@ export default function Updates() {
 
             <div className="row" style={{ justifyContent: "space-between" }}>
               <div className="subtle" style={{ fontSize: 12 }}>
-                Suggestions are sent through Formspree.
+                Sent securely via Formspree.
               </div>
               <button className="btn accent" disabled={sending}>
                 {sending ? "Sending…" : "Send"}

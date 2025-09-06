@@ -1,16 +1,19 @@
 // src/pages/Updates.jsx
 import { useEffect, useState } from "react";
 
+const WEBAPP_URL = import.meta.env.VITE_GOOGLE_WEBAPP_URL;
+const FORMSPREE_URL = import.meta.env.VITE_FORMSPREE_URL;
+
 export default function Updates() {
-  // ----- updates from a static JSON file in /public -----
-  const [updates, setUpdates] = useState(null); // null = loading
+  // ----- updates from Google Sheets (via Apps Script) -----
+  const [updates, setUpdates] = useState(null);
   const [loadErr, setLoadErr] = useState("");
 
   useEffect(() => {
     let alive = true;
     (async () => {
       try {
-        const res = await fetch("/updates.json?ts=" + Date.now());
+        const res = await fetch(`${WEBAPP_URL}?ts=${Date.now()}`);
         if (!res.ok) throw new Error("HTTP " + res.status);
         const data = await res.json();
         if (alive) setUpdates(Array.isArray(data) ? data : []);
@@ -36,8 +39,7 @@ export default function Updates() {
     setSending(true);
     setErr("");
     try {
-      // ⬇️ replace with your own Formspree endpoint ID
-      const res = await fetch("https://formspree.io/f/xqadydko", {
+      const res = await fetch(FORMSPREE_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: msg, email }),
@@ -60,15 +62,12 @@ export default function Updates() {
         <h2>Updates</h2>
 
         {updates === null && <div className="subtle">Loading updates…</div>}
-
         {updates !== null && loadErr && (
           <div className="badge" style={{ borderColor: "#d66", color: "#ffdede" }}>{loadErr}</div>
         )}
-
         {Array.isArray(updates) && updates.length === 0 && !loadErr && (
           <div className="subtle">No updates yet.</div>
         )}
-
         {Array.isArray(updates) && updates.length > 0 && (
           <div className="grid" style={{ gap: 12 }}>
             {updates.map((u, i) => (

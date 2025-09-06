@@ -1,58 +1,72 @@
 // src/pages/Randomizer.jsx
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { CATEGORIES, WEAPONS, ALL_SLOTS } from "../data/weapons.js";
+import { CATEGORIES, WEAPONS } from "../data/weapons.js";
 import { rngFromSeed, pick, sample, randomSeed } from "../lib/rng.js";
 import { addFave } from "../lib/faves.js";
 import Toast from "../components/Toast.jsx";
 
-const STORAGE_KEY  = "dmz_allowed_categories_v1";
-const PREFS_KEY    = "dmz_preferred_slots_v1";
-const BIAS_KEY     = "dmz_preferred_bias_v1";
-const PLACEHOLDER  = "/images/weapons/placeholder.png";
+/* ===========================
+   LocalStorage keys
+   =========================== */
+const STORAGE_KEY   = "dmz_allowed_categories_v1";
+const PREFS_KEY     = "dmz_preferred_slots_v1";     // stores ["muzzle","magazine"]
+const BIAS_KEY      = "dmz_preferred_bias_v1";      // 0–50
+const NO_OPTIC_KEY  = "dmz_no_optic_v1";            // "1" | "0"
+const PLACEHOLDER   = "/images/weapons/placeholder.png";
 
 export default function Randomizer() {
+  /* ===========================
+     URL state (shareable)
+     =========================== */
   const [params] = useSearchParams();
   const navigate = useNavigate();
-
-  // Shareable state via URL
   const [seed, setSeed] = useState(() => params.get("seed") || randomSeed());
   const [roll, setRoll] = useState(() => Number(params.get("n") || 0));
 
-  // Extra randomness (breaks determinism on purpose)
-  const [chaos, setChaos] = useState(false);
-
-  // Category filter (persisted)
+  /* ===========================
+     User controls (persisted)
+     =========================== */
+  // allowed weapon categories
   const [allowedCats, setAllowedCats] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [...CATEGORIES]; }
     catch { return [...CATEGORIES]; }
   });
 
-  // Preferred slot types (persisted)
+  // preferred slot types (lowercase members of: "muzzle", "magazine")
   const [preferred, setPreferred] = useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(PREFS_KEY)) || []); }
     catch { return new Set(); }
   });
 
-  // Preferred bias strength 0–50% (persisted)
+  // how strong the preference bias should be (0–50)
   const [preferredBias, setPreferredBias] = useState(() => {
     try {
-      const v = Number(localStorage.getItem(BIAS_KEY));
-      return Number.isFinite(v) ? Math.max(0, Math.min(50, v)) : 25;
+      const n = Number(localStorage.getItem(BIAS_KEY));
+      return Number.isFinite(n) ? Math.max(0, Math.min(50, n)) : 25;
     } catch { return 25; }
   });
 
+  // exclude the Optic slot entirely unless it’s locked
+  const [noOptic, setNoOptic] = useState(() => {
+    try { return localStorage.getItem(NO_OPTIC_KEY) === "1"; }
+    catch { return false; }
+  });
+
+  // chaos mode breaks determinism on purpose
+  const [chaos, setChaos] = useState(false);
+
+  // lock controls
   const [weaponLocked, setWeaponLocked] = useState(false);
-  const [attachmentLocks, setAttachmentLocks] = useState({}); // {slotName: true}
+  const [attachmentLocks, setAttachmentLocks] = useState({}); // { [slotName]: true }
+
+  // misc ui
   const [toast, setToast] = useState("");
+  const cardRef = useRef(null);
 
-  // Keep URL and storage in sync
-  useEffect(() => {
-    const catsStr = allowedCats.join(",");
-    const search = new URLSearchParams({ seed, n: String(roll), cats: catsStr });
-    navigate({ pathname: "/", search: `?${search.toString()}` }, { replace: true });
-  }, [seed, roll, allowedCats, navigate]);
-
+  /* ===========================
+     Persistence + URL sync
+     =========================== */
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(allowedCats));
   }, [allowedCats]);
@@ -65,7 +79,19 @@ export default function Randomizer() {
     localStorage.setItem(BIAS_KEY, String(preferredBias));
   }, [preferredBias]);
 
-  // Deterministic RNG streams unless chaos=true
+  useEffect(() => {
+    localStorage.setItem(NO_OPTIC_KEY, noOptic ? "1" : "0");
+  }, [noOptic]);
+
+  useEffect(() => {
+    const catsStr = allowedCats.join(",");
+    const search = new URLSearchParams({ seed, n: String(roll), cats: catsStr });
+    navigate({ pathname: "/", search: `?${search.toString()}` }, { replace: true });
+  }, [seed, roll, allowedCats, navigate]);
+
+  /* ===========================
+     RNG streams (deterministic unless chaos)
+     =========================== */
   const weaponRng = useMemo(
     () => (chaos ? Math.random : rngFromSeed(`${seed}|${roll}|weapon`)),
     [seed, roll, chaos]
@@ -75,25 +101,27 @@ export default function Randomizer() {
     [seed, roll, chaos]
   );
 
-  // Defensive category read (handles "catergory" typo)
+  /* ===========================
+     Weapon pool + picked weapon
+     =========================== */
   const getCat = (w) => (w.category || w.catergory || "").toString();
-
-  // Weapon pool by allowed categories
   const pool = useMemo(
     () => WEAPONS.filter((w) => allowedCats.includes(getCat(w))),
     [allowedCats]
   );
 
-  // Current weapon (resets locks on change unless locked)
   const [pickedWeapon, setPickedWeapon] = useState(null);
   useEffect(() => {
     if (weaponLocked && pickedWeapon) return;
     setPickedWeapon(pool.length ? pick(pool, weaponRng) : null);
-    setAttachmentLocks({}); // reset per-weapon
+    setAttachmentLocks({}); // reset slot locks when weapon changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weaponRng, pool.length, weaponLocked]);
 
-  // Helper: weighted unique sampling
+  /* ===========================
+     Helpers
+     =========================== */
+  // Sample up to k unique items, with an integer weight per item.
   function weightedSampleUnique(candidates, k, rng, weightFn) {
     if (!candidates.length || k <= 0) return [];
     const expanded = [];
@@ -101,8 +129,7 @@ export default function Randomizer() {
       const w = Math.max(1, Number(weightFn(s)) || 1);
       for (let i = 0; i < w; i++) expanded.push(s);
     }
-    const draws = Math.min(expanded.length, k * 6);
-    const drawn = sample(expanded, draws, rng);
+    const drawn = sample(expanded, Math.min(expanded.length, k * 6), rng);
     const out = [];
     const seen = new Set();
     for (const s of drawn) {
@@ -121,50 +148,65 @@ export default function Randomizer() {
     return out.slice(0, k);
   }
 
-  // Build exactly 5 slots; prefer chosen slot types by bias (never guaranteed)
+  /* ===========================
+     Build: choose exactly 5 slots
+     - Locks are guaranteed
+     - Preferred slots get higher weight
+     - "No Optic" removes Optic from candidates (unless locked)
+     =========================== */
   const build = useMemo(() => {
     if (!pickedWeapon) return [];
 
+    // normalized slots map like { Muzzle: [...], Barrel: [...], ... }
     const slotsObj =
       pickedWeapon.slots && typeof pickedWeapon.slots === "object" ? pickedWeapon.slots : {};
     const allSlots = Object.keys(slotsObj).filter(
       (s) => Array.isArray(slotsObj[s]) && slotsObj[s].length
     );
 
-    // Resolve locks to real slot names (case-insensitive)
-    const lockedSlots = Object.keys(attachmentLocks).filter((s) => attachmentLocks[s]);
+    // resolve locks to real slot names (case-insensitive)
+    const lockedKeys = Object.keys(attachmentLocks).filter((s) => attachmentLocks[s]);
     const lockedResolved = allSlots.filter((s) =>
-      lockedSlots.some((ls) => ls.toLowerCase() === s.toLowerCase())
+      lockedKeys.some((k) => k.toLowerCase() === s.toLowerCase())
     );
 
-    const excluded = new Set(lockedResolved);
-    const candidates = allSlots.filter((s) => !excluded.has(s));
+    // candidates are the remaining usable slots
+    let candidates = allSlots.filter((s) => !lockedResolved.includes(s));
+
+    // honor "No Optic" *unless* Optic is locked
+    const opticIsLocked = lockedResolved.some((s) => s.toLowerCase() === "optic");
+    if (noOptic && !opticIsLocked) {
+      candidates = candidates.filter((s) => s.toLowerCase() !== "optic");
+    }
+
     const need = Math.max(0, 5 - lockedResolved.length);
 
-    // 0–50% -> x1.0–x2.0 multiplier for preferred slots
-    const weight = (s) => {
-      const mult = 1 + preferredBias / 50;
-      return preferred.has(s.toLowerCase()) ? mult : 1;
-    };
+    // bias mapping: 0–50% -> 1.0–2.0 weight multiplier
+    const biasMult = 1 + preferredBias / 50;
+    const weight = (s) => (preferred.has(s.toLowerCase()) ? biasMult : 1);
 
     const biased = weightedSampleUnique(candidates, need, buildRng, weight);
     const finalSlots = [...lockedResolved, ...biased].slice(0, 5);
 
-    // Pick one attachment per chosen slot
+    // pick a single attachment for each chosen slot (deterministic per slot)
     return finalSlots.map((slot) => {
       const options = slotsObj[slot] || [];
       const rng = rngFromSeed(`${seed}|${roll}|slot:${slot}`);
       const name = options.length ? pick(options, rng) : null;
       return { slot, name };
     });
-  }, [pickedWeapon, buildRng, attachmentLocks, preferred, preferredBias, seed, roll]);
+  }, [pickedWeapon, buildRng, attachmentLocks, preferred, preferredBias, noOptic, seed, roll]);
 
-  // Actions
-  const rerollAll         = () => setRoll((r) => r + 1);
-  const rerollWeaponOnly  = () => { if (!weaponLocked) setRoll((r) => r + 1); };
-  const rerollSeedEntirely= () => { setSeed(randomSeed()); setRoll(0); };
-  const toggleCat         = (cat) =>
-    setAllowedCats((prev) => (prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]));
+  /* ===========================
+     UI actions
+     =========================== */
+  const rerollAll = () => setRoll((r) => r + 1);
+  const rerollWeaponOnly = () => { if (!weaponLocked) setRoll((r) => r + 1); };
+  const rerollSeedEntirely = () => { setSeed(randomSeed()); setRoll(0); };
+  const toggleCat = (cat) =>
+    setAllowedCats((prev) =>
+      prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
+    );
   const toggleAttachmentLock = (slot) =>
     setAttachmentLocks((prev) => ({ ...prev, [slot]: !prev[slot] }));
   const togglePreferredSlot = (slotType) => {
@@ -181,9 +223,11 @@ export default function Randomizer() {
     setToast("Link copied!");
   };
 
+  /* ===========================
+     Derived UI bits
+     =========================== */
   const noPool = pool.length === 0;
   const heroImage = pickedWeapon?.image || PLACEHOLDER;
-  const cardRef = useRef(null);
 
   function saveCurrentBuild() {
     if (!pickedWeapon) return;
@@ -199,6 +243,9 @@ export default function Randomizer() {
     setToast("Saved to favorites!");
   }
 
+  /* ===========================
+     Render
+     =========================== */
   return (
     <div className="grid" style={{ gap: 16 }}>
       {/* Seed / controls */}
@@ -211,6 +258,7 @@ export default function Randomizer() {
               <span className="copy">roll #{roll}</span>
             </div>
           </div>
+
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <button className="btn ghost" onClick={copyPermalink}>Copy permalink</button>
             <button className="btn" onClick={rerollAll}>Reroll all</button>
@@ -220,6 +268,7 @@ export default function Randomizer() {
               className={`badge ${chaos ? "on" : ""}`}
               onClick={() => setChaos((v) => !v)}
               title="Extra randomness"
+              aria-pressed={chaos}
             >
               {chaos ? "🧨 Chaos ON" : "✨ Chaos OFF"}
             </button>
@@ -234,10 +283,11 @@ export default function Randomizer() {
         </button>
       </div>
 
-      {/* Main card + Filters */}
+      {/* Two-column: main card | filters */}
       <div className="two-col">
         {/* Main card */}
         <div className="panel main-card" ref={cardRef}>
+          {/* header */}
           <div className="row" style={{ justifyContent: "space-between" }}>
             <div className="row" style={{ gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
               <div className="big">{pickedWeapon ? pickedWeapon.name : "No weapon"}</div>
@@ -249,6 +299,7 @@ export default function Randomizer() {
             <button
               className={`badge ${weaponLocked ? "on" : ""}`}
               onClick={() => setWeaponLocked((v) => !v)}
+              aria-pressed={weaponLocked}
             >
               {weaponLocked ? "🔒 locked" : "🔓 lock weapon"}
             </button>
@@ -256,7 +307,7 @@ export default function Randomizer() {
 
           <div className="hr" style={{ margin: "12px 0" }} />
 
-          {/* Hero image */}
+          {/* hero image */}
           {pickedWeapon && (
             <div style={{ margin: "0 0 12px 0" }}>
               <img
@@ -268,11 +319,14 @@ export default function Randomizer() {
             </div>
           )}
 
-          {/* Attachments (selected 5 only) */}
+          {/* attachment tiles */}
           {noPool && <div className="subtle">Enable at least one category to roll a weapon.</div>}
 
           {!noPool && pickedWeapon && (
-            <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+            <div
+              className="grid"
+              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}
+            >
               {build.map(({ slot, name }) => (
                 <div className="card" key={slot}>
                   <div className="row" style={{ justifyContent: "space-between" }}>
@@ -281,13 +335,16 @@ export default function Randomizer() {
                       <div style={{ fontWeight: 700 }}>{name || "—"}</div>
                     </div>
                     <div className="row" style={{ gap: 8 }}>
+                      {/* lock/unlock this slot */}
                       <button
                         className={`badge ${attachmentLocks[slot] ? "on" : ""}`}
                         onClick={() => toggleAttachmentLock(slot)}
                         title={attachmentLocks[slot] ? "Unlock slot" : "Lock slot"}
+                        aria-pressed={!!attachmentLocks[slot]}
                       >
                         {attachmentLocks[slot] ? "🔒" : "🔓"}
                       </button>
+                      {/* label if this slot is in preferred set */}
                       {preferred.has(slot.toLowerCase()) && (
                         <span className="badge">preferred</span>
                       )}
@@ -299,8 +356,9 @@ export default function Randomizer() {
           )}
         </div>
 
-        {/* Filters */}
+        {/* Filters panel */}
         <div className="panel">
+          {/* categories */}
           <div className="row" style={{ justifyContent: "space-between" }}>
             <div style={{ fontWeight: 700 }}>Filters</div>
             <div className="subtle">Choose categories</div>
@@ -312,6 +370,7 @@ export default function Randomizer() {
                 key={cat}
                 className={`badge ${allowedCats.includes(cat) ? "on" : ""}`}
                 onClick={() => toggleCat(cat)}
+                aria-pressed={allowedCats.includes(cat)}
               >
                 {cat}
               </button>
@@ -320,29 +379,43 @@ export default function Randomizer() {
 
           <div className="hr" style={{ margin: "12px 0" }} />
 
+          {/* preferred controls (minimal: 3 buttons) */}
           <div className="row" style={{ justifyContent: "space-between" }}>
             <div style={{ fontWeight: 700 }}>Preferred slots</div>
             <div className="subtle" style={{ fontSize: 12 }}>bias only • not guaranteed</div>
           </div>
 
           <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-            {(ALL_SLOTS || ["Muzzle","Barrel","Optic","UnderBarrel","Magazine","Reargrip","Stock","Laser","Ammo","Comb"]).map((slotType) => {
-              const key = slotType.toLowerCase();
-              const on = preferred.has(key);
-              return (
-                <button
-                  key={slotType}
-                  className={`badge ${on ? "on" : ""}`}
-                  onClick={() => togglePreferredSlot(slotType)}
-                  title={on ? "Remove preference" : "Prefer this slot"}
-                >
-                  {slotType}
-                </button>
-              );
-            })}
+            {/* Prefer Suppressor (Muzzle) */}
+            <button
+              className={`badge ${preferred.has("muzzle") ? "on" : ""}`}
+              onClick={() => togglePreferredSlot("Muzzle")}
+              aria-pressed={preferred.has("muzzle")}
+            >
+              Prefer Suppressor
+            </button>
+
+            {/* Prefer Extended Mag (Magazine) */}
+            <button
+              className={`badge ${preferred.has("magazine") ? "on" : ""}`}
+              onClick={() => togglePreferredSlot("Magazine")}
+              aria-pressed={preferred.has("magazine")}
+            >
+              Prefer Extended Mag
+            </button>
+
+            {/* Exclude the Optic slot entirely (unless locked) */}
+            <button
+              className={`badge ${noOptic ? "on" : ""}`}
+              onClick={() => setNoOptic((v) => !v)}
+              aria-pressed={noOptic}
+              title="Exclude the Optic slot from the 5 (locks still win)"
+            >
+              No Optic
+            </button>
           </div>
 
-          {/* Bias slider */}
+          {/* bias slider */}
           <div className="range" style={{ marginTop: 12 }}>
             <div className="labels">
               <span>0%</span>
@@ -367,7 +440,7 @@ export default function Randomizer() {
 
       <Toast msg={toast} onDone={() => setToast("")} />
 
-      {/* Sticky mobile Randomize button */}
+      {/* Sticky mobile Randomize */}
       <div className="mobile-fab">
         <button className="big-randomize" onClick={rerollAll} title="Randomize">
           <span className="icon">🎲</span> Randomize

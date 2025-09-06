@@ -1,193 +1,203 @@
-// src/pages/Weapons.jsx
-import { useEffect, useMemo, useRef, useState } from "react";
-import { CATEGORIES, WEAPONS } from "../data/weapons.js";
+// src/pages/Gunsmith.jsx
+// -------------------------------------------------------------
+// Build-Your-Own Gunsmith
+// - Pick a base weapon
+// - Choose up to 5 attachments (max 1 per slot)
+// - Live counter, clear-all, save to Favorites
+// -------------------------------------------------------------
+import { useMemo, useState } from "react";
+import { WEAPONS } from "../data/weapons.js";
+import { addFave } from "../lib/faves.js";
+import Toast from "../components/Toast.jsx";
 
-function getCategory(w) {
-  // handle typos in your data
-  return (w.category || w.catergory || "Unknown")?.toString();
-}
-function slotCount(w) {
-  const slots = w?.slots && typeof w.slots === "object" ? w.slots : {};
-  return Object.keys(slots).length;
-}
-function attachmentCount(w) {
-  const slots = w?.slots && typeof w.slots === "object" ? w.slots : {};
-  return Object.values(slots).reduce((sum, v) => {
-    const arr = Array.isArray(v) ? v : [];
-    return sum + arr.length;
-  }, 0);
-}
+const PLACEHOLDER = "/images/weapons/placeholder.png";
+const MAX_ATTACH = 5;
 
-export default function Weapons() {
-  // --- NEW: search state ---
-  const [q, setQ] = useState("");
-  const inputRef = useRef(null);
+export default function Gunsmith() {
+  // ---------- base weapon ----------
+  const sortedWeapons = useMemo(
+    () => [...WEAPONS].sort((a, b) => a.name.localeCompare(b.name)),
+    []
+  );
+  const [weaponIdx, setWeaponIdx] = useState(0);
+  const weapon = sortedWeapons[weaponIdx] || null;
 
-  // keyboard UX: "/" to focus, "Esc" to clear/blur (not in inputs)
-  useEffect(() => {
-    const onKey = (e) => {
-      const tag = (e.target?.tagName || "").toLowerCase();
-      if (tag === "input" || tag === "textarea") return;
-      if (e.key === "/") {
-        e.preventDefault();
-        inputRef.current?.focus();
+  // ---------- attachment state ----------
+  // { [slotName]: "Attachment Name" | "" }
+  const initialSlots = useMemo(() => {
+    if (!weapon?.slots) return {};
+    const names = Object.keys(weapon.slots || {});
+    const obj = {};
+    for (const s of names) obj[s] = "";
+    return obj;
+  }, [weapon]);
+
+  const [chosen, setChosen] = useState(initialSlots);
+
+  // Reset chosen when weapon changes
+  function onChangeWeapon(e) {
+    const idx = Number(e.target.value);
+    setWeaponIdx(idx);
+    const w = sortedWeapons[idx];
+    const obj = {};
+    for (const s of Object.keys(w?.slots || {})) obj[s] = "";
+    setChosen(obj);
+  }
+
+  // Count selected
+  const selectedCount = useMemo(
+    () =>
+      Object.values(chosen).filter((v) => v && v.trim().length > 0).length,
+    [chosen]
+  );
+  const remaining = Math.max(0, MAX_ATTACH - selectedCount);
+
+  // Change selection for a slot (enforce <= 5)
+  function setSlot(slot, value) {
+    setChosen((prev) => {
+      // if trying to pick a new (non-empty) value and we're at limit, block
+      const was = prev[slot] || "";
+      const isAdding = value && !was;
+      if (isAdding && selectedCount >= MAX_ATTACH) {
+        // Block by returning prev unchanged
+        return prev;
       }
-    };
-    const onEsc = (e) => {
-      if (e.key === "Escape") {
-        setQ("");
-        inputRef.current?.blur();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    window.addEventListener("keydown", onEsc);
-    return () => {
-      window.removeEventListener("keydown", onKey);
-      window.removeEventListener("keydown", onEsc);
-    };
-  }, []);
+      return { ...prev, [slot]: value };
+    });
+  }
 
-  // group by category
-  const byCat = useMemo(() => {
-    const map = new Map();
-    for (const w of WEAPONS) {
-      const cat = getCategory(w);
-      if (!map.has(cat)) map.set(cat, []);
-      map.get(cat).push(w);
-    }
-    return map;
-  }, []);
+  // Clear all selections
+  function clearAll() {
+    setChosen((prev) => {
+      const clone = { ...prev };
+      for (const k of Object.keys(clone)) clone[k] = "";
+      return clone;
+    });
+  }
 
-  // official categories first, then extras
-  const extraCats = [...byCat.keys()].filter((c) => !CATEGORIES.includes(c));
-  const sections = [...CATEGORIES, ...extraCats];
+  // Save to favorites
+  const [toast, setToast] = useState("");
+  function saveBuild() {
+    if (!weapon) return;
+    const attachments = Object.entries(chosen)
+      .filter(([, name]) => name)
+      .map(([slot, name]) => ({ slot, name }));
 
-  // --- NEW: normalized query & filter ---
-  const qn = q.trim().toLowerCase();
+    addFave({
+      weapon: weapon.name,
+      category: weapon.category || weapon.catergory || "Unknown",
+      image: weapon.image || PLACEHOLDER,
+      seed: "gunsmith", // marker that this is BYO build
+      roll: 0,
+      attachments,
+    });
+    setToast("Saved to favorites!");
+  }
 
+  // ---------- render ----------
   return (
     <div className="grid" style={{ gap: 16 }}>
-      {/* Search bar */}
       <div className="panel">
-        <div className="row" style={{ justifyContent: "space-between" }}>
-          <div style={{ fontWeight: 700 }}>Weapons</div>
-          <div className="subtle" style={{ fontSize: 13 }}>
-            Tip: Press <span className="kbd">/</span> to focus search
+        <h2>Build your own gunsmith</h2>
+
+        {/* pick base weapon */}
+        <div className="row" style={{ gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <label className="subtle" htmlFor="weaponSel">Base weapon</label>
+          <select
+            id="weaponSel"
+            value={weaponIdx}
+            onChange={onChangeWeapon}
+            style={{
+              background: "var(--bg-2)",
+              border: "1px solid var(--border)",
+              color: "var(--text)",
+              borderRadius: 10,
+              padding: "8px 10px",
+            }}
+          >
+            {sortedWeapons.map((w, i) => (
+              <option key={w.name + i} value={i}>
+                {w.name} {w.category ? `• ${w.category}` : ""}
+              </option>
+            ))}
+          </select>
+
+          <div className="kbd">
+            {selectedCount}/{MAX_ATTACH} selected
           </div>
+
+          <div style={{ marginLeft: "auto" }} />
+          <button className="btn" onClick={clearAll}>Clear all</button>
+          <button className="btn accent" onClick={saveBuild} disabled={selectedCount === 0}>
+            ⭐ Save build
+          </button>
         </div>
-        <div className="row" style={{ marginTop: 8 }}>
-          <input
-            ref={inputRef}
-            type="text"
-            placeholder="Search weapons… (e.g., M4, Kastov, Vaznev)"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            style={{ maxWidth: 520 }}
-          />
-          {q && (
-            <button className="btn" onClick={() => setQ("")}>
-              Clear
-            </button>
-          )}
-        </div>
+
+        <div className="hr" style={{ margin: "12px 0" }} />
+
+        {/* hero image */}
+        {weapon && (
+          <div style={{ marginBottom: 12 }}>
+            <img
+              src={weapon.image || PLACEHOLDER}
+              alt={weapon.name}
+              className="heroimg"
+              onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
+            />
+          </div>
+        )}
+
+        {/* slot pickers */}
+        {!weapon?.slots || Object.keys(weapon.slots).length === 0 ? (
+          <div className="subtle">This weapon has no attachment data.</div>
+        ) : (
+          <div
+            className="grid"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}
+          >
+            {Object.entries(weapon.slots).map(([slot, options]) => {
+              const val = chosen[slot] || "";
+              const disabledAll = remaining === 0 && !val; // block picking new if at limit
+              return (
+                <div className="card" key={slot}>
+                  <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
+                    <div className="label-caps">{slot}</div>
+                    {val ? <span className="badge on">selected</span> : <span className="badge">empty</span>}
+                  </div>
+                  <select
+                    value={val}
+                    onChange={(e) => setSlot(slot, e.target.value)}
+                    disabled={disabledAll}
+                    style={{
+                      width: "100%",
+                      background: "var(--bg-2)",
+                      border: "1px solid var(--border)",
+                      color: "var(--text)",
+                      borderRadius: 10,
+                      padding: "10px 12px",
+                    }}
+                  >
+                    <option value="">— none —</option>
+                    {Array.isArray(options) &&
+                      options.map((name, i) => (
+                        <option key={name + i} value={name}>
+                          {name}
+                        </option>
+                      ))}
+                  </select>
+                  {disabledAll && !val && (
+                    <div className="subtle" style={{ fontSize: 12, marginTop: 6 }}>
+                      Max {MAX_ATTACH} attachments selected. Clear one to add another.
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Sections */}
-      {sections.map((cat) => {
-        // list within this category, filtered by search query
-        const listAll = (byCat.get(cat) || []).sort((a, b) =>
-          a.name.localeCompare(b.name)
-        );
-        const list = qn
-          ? listAll.filter((w) => w.name.toLowerCase().includes(qn))
-          : listAll;
-
-        if (!list.length) return null;
-
-        return (
-          <section className="panel" key={cat}>
-            <h2 style={{ margin: "0 0 8px 0" }}>
-              {cat} <span className="subtle" style={{ marginLeft: 6, fontSize: 12 }}>• {list.length}</span>
-            </h2>
-
-            <div
-              className="grid"
-              style={{
-                gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
-                gap: 12,
-              }}
-            >
-              {list.map((w) => {
-                const slots = w?.slots && typeof w.slots === "object" ? w.slots : {};
-                const entries = Object.entries(slots);
-
-                return (
-                  <div className="card" key={w.name}>
-                    {/* image (optional) */}
-                    <div style={{ marginBottom: 8 }}>
-                      <img
-                        src={w.image || "/images/weapons/placeholder.png"}
-                        alt={w.name}
-                        className="thumb"
-                        loading="lazy"
-                        onError={(e) => {
-                          e.currentTarget.src = "/images/weapons/placeholder.png";
-                        }}
-                      />
-                    </div>
-
-                    {/* name + counts */}
-                    <div style={{ fontWeight: 700, marginBottom: 4 }}>{w.name}</div>
-                    <div className="subtle" style={{ fontSize: 13, marginBottom: 8 }}>
-                      {slotCount(w)} slot types • {attachmentCount(w)} attachments
-                    </div>
-                       <span className={`badge ${getCategory(w)}`}>{getCategory(w)}</span>
-                    {/* attachments visible by default */}
-                    <details>
-                      <summary className="subtle">Attachments</summary>
-
-                      {/* each slot block */}
-                      <div className="grid" style={{ gap: 10, marginTop: 8 }}>
-                        {entries.map(([slot, opts]) => {
-                          const arr = Array.isArray(opts) ? opts : [];
-                          return (
-                            <div key={slot}>
-                              <div
-                                className="subtle"
-                                style={{ fontSize: 12, marginBottom: 6 }}
-                              >
-                                <span className="kbd">{slot}</span> • {arr.length}
-                              </div>
-
-                              <div
-                                className="row"
-                                style={{
-                                  gap: 8,
-                                  alignItems: "flex-start",
-                                  flexWrap: "wrap",
-                                }}
-                              >
-                                {arr.map((name) => (
-                                  <span className="badge" key={name}>
-                                    {name}
-                                  </span>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                        {!entries.length && (
-                          <div className="subtle">No slots listed for this weapon.</div>
-                        )}
-                      </div>
-                    </details>
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        );
-      })}
+      <Toast msg={toast} onDone={() => setToast("")} />
     </div>
   );
 }

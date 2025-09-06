@@ -1,19 +1,82 @@
 // src/pages/Randomizer.jsx
+// -------------------------------------------------------------
+// DMZ Randomizer (final)
+// - Shareable seed/roll via URL
+// - Deterministic RNG streams (unless Chaos ON)
+// - Category filters, slot locks
+// - Preferred controls: Suppressed Muzzle, Larger Mag, No Optic
+// - Bias slider affects both slot selection and attachment choice
+// -------------------------------------------------------------
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { CATEGORIES, WEAPONS } from "../data/weapons.js";
 import { rngFromSeed, pick, sample, randomSeed } from "../lib/rng.js";
 import { addFave } from "../lib/faves.js";
 import Toast from "../components/Toast.jsx";
+import { hasTag } from "../lib/attachTags.js";
 
 /* ===========================
    LocalStorage keys
    =========================== */
-const STORAGE_KEY   = "dmz_allowed_categories_v1";
-const PREFS_KEY     = "dmz_preferred_slots_v1";     // stores ["muzzle","magazine"]
-const BIAS_KEY      = "dmz_preferred_bias_v1";      // 0–50
-const NO_OPTIC_KEY  = "dmz_no_optic_v1";            // "1" | "0"
+const STORAGE_KEY   = "dmz_allowed_categories_v1"; // string[]
+const BIAS_KEY      = "dmz_preferred_bias_v1";     // number 0–50
+const NO_OPTIC_KEY  = "dmz_no_optic_v1";           // "1" | "0"
+const PREF_SUP_KEY  = "dmz_pref_suppressor";       // "1" | "0"
+const PREF_EXT_KEY  = "dmz_pref_extended";         // "1" | "0"
+
 const PLACEHOLDER   = "/images/weapons/placeholder.png";
+
+/* ===========================
+   Small helpers
+   =========================== */
+function normSlot(s = "") {
+  const k = String(s).toLowerCase();
+  if (k === "mag" || k === "mag." || k === "magazines") return "magazine";
+  if (k === "muzz" || k === "mzl") return "muzzle";
+  return k; // "muzzle", "magazine", "optic", etc.
+}
+
+/** Weighted unique sampling (integer weights). */
+function weightedSampleUnique(candidates, k, rng, weightFn) {
+  if (!candidates.length || k <= 0) return [];
+  const expanded = [];
+  for (const s of candidates) {
+    // Accept float from weightFn and convert to a stable int
+    const wFloat = Number(weightFn(s)) || 1;
+    const w = Math.max(1, Math.round(wFloat * 10)); // 1.0–2.0 -> 10–20
+    for (let i = 0; i < w; i++) expanded.push(s);
+  }
+  const drawn = sample(expanded, Math.min(expanded.length, k * 8), rng);
+  const out = [];
+  const seen = new Set();
+  for (const s of drawn) {
+    if (!seen.has(s)) {
+      out.push(s);
+      seen.add(s);
+      if (out.length === k) break;
+    }
+  }
+  if (out.length < k) {
+    for (const s of candidates) {
+      if (out.length === k) break;
+      if (!seen.has(s)) { out.push(s); seen.add(s); }
+    }
+  }
+  return out.slice(0, k);
+}
+
+/** Weighted pick among options (integer weights). */
+function weightedPick(options, rng, weightFn) {
+  if (!options?.length) return null;
+  const expanded = [];
+  for (const opt of options) {
+    const wFloat = Number(weightFn(opt)) || 1;
+    const w = Math.max(1, Math.round(wFloat * 10));
+    for (let i = 0; i < w; i++) expanded.push(opt);
+  }
+  return pick(expanded, rng);
+}
 
 export default function Randomizer() {
   /* ===========================
@@ -27,19 +90,13 @@ export default function Randomizer() {
   /* ===========================
      User controls (persisted)
      =========================== */
-  // allowed weapon categories
+  // Allowed weapon categories
   const [allowedCats, setAllowedCats] = useState(() => {
     try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [...CATEGORIES]; }
     catch { return [...CATEGORIES]; }
   });
 
-  // preferred slot types (lowercase members of: "muzzle", "magazine")
-  const [preferred, setPreferred] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem(PREFS_KEY)) || []); }
-    catch { return new Set(); }
-  });
-
-  // how strong the preference bias should be (0–50)
+  // Bias strength 0–50% (maps to 1.0–2.0 multiplier)
   const [preferredBias, setPreferredBias] = useState(() => {
     try {
       const n = Number(localStorage.getItem(BIAS_KEY));
@@ -47,20 +104,23 @@ export default function Randomizer() {
     } catch { return 25; }
   });
 
-  // exclude the Optic slot entirely unless it’s locked
+  // Preferred toggles
+  const [preferSuppressor, setPreferSuppressor] = useState(() => {
+    try { return localStorage.getItem(PREF_SUP_KEY) === "1"; } catch { return false; }
+  });
+  const [preferExtendedMag, setPreferExtendedMag] = useState(() => {
+    try { return localStorage.getItem(PREF_EXT_KEY) === "1"; } catch { return false; }
+  });
   const [noOptic, setNoOptic] = useState(() => {
-    try { return localStorage.getItem(NO_OPTIC_KEY) === "1"; }
-    catch { return false; }
+    try { return localStorage.getItem(NO_OPTIC_KEY) === "1"; } catch { return false; }
   });
 
-  // chaos mode breaks determinism on purpose
+  // Chaos + locks
   const [chaos, setChaos] = useState(false);
-
-  // lock controls
   const [weaponLocked, setWeaponLocked] = useState(false);
   const [attachmentLocks, setAttachmentLocks] = useState({}); // { [slotName]: true }
 
-  // misc ui
+  // Misc UI
   const [toast, setToast] = useState("");
   const cardRef = useRef(null);
 
@@ -72,10 +132,6 @@ export default function Randomizer() {
   }, [allowedCats]);
 
   useEffect(() => {
-    localStorage.setItem(PREFS_KEY, JSON.stringify(Array.from(preferred)));
-  }, [preferred]);
-
-  useEffect(() => {
     localStorage.setItem(BIAS_KEY, String(preferredBias));
   }, [preferredBias]);
 
@@ -83,6 +139,15 @@ export default function Randomizer() {
     localStorage.setItem(NO_OPTIC_KEY, noOptic ? "1" : "0");
   }, [noOptic]);
 
+  useEffect(() => {
+    localStorage.setItem(PREF_SUP_KEY, preferSuppressor ? "1" : "0");
+  }, [preferSuppressor]);
+
+  useEffect(() => {
+    localStorage.setItem(PREF_EXT_KEY, preferExtendedMag ? "1" : "0");
+  }, [preferExtendedMag]);
+
+  // Keep URL in sync (seed, roll, category filter)
   useEffect(() => {
     const catsStr = allowedCats.join(",");
     const search = new URLSearchParams({ seed, n: String(roll), cats: catsStr });
@@ -105,6 +170,7 @@ export default function Randomizer() {
      Weapon pool + picked weapon
      =========================== */
   const getCat = (w) => (w.category || w.catergory || "").toString();
+
   const pool = useMemo(
     () => WEAPONS.filter((w) => allowedCats.includes(getCat(w))),
     [allowedCats]
@@ -119,47 +185,19 @@ export default function Randomizer() {
   }, [weaponRng, pool.length, weaponLocked]);
 
   /* ===========================
-     Helpers
-     =========================== */
-  // Sample up to k unique items, with an integer weight per item.
-  function weightedSampleUnique(candidates, k, rng, weightFn) {
-    if (!candidates.length || k <= 0) return [];
-    const expanded = [];
-    for (const s of candidates) {
-      const w = Math.max(1, Number(weightFn(s)) || 1);
-      for (let i = 0; i < w; i++) expanded.push(s);
-    }
-    const drawn = sample(expanded, Math.min(expanded.length, k * 6), rng);
-    const out = [];
-    const seen = new Set();
-    for (const s of drawn) {
-      if (!seen.has(s)) {
-        out.push(s);
-        seen.add(s);
-        if (out.length === k) break;
-      }
-    }
-    if (out.length < k) {
-      for (const s of candidates) {
-        if (out.length === k) break;
-        if (!seen.has(s)) { out.push(s); seen.add(s); }
-      }
-    }
-    return out.slice(0, k);
-  }
-
-  /* ===========================
-     Build: choose exactly 5 slots
-     - Locks are guaranteed
-     - Preferred slots get higher weight
+     Build (exactly 5 slots)
+     - Locks guaranteed
+     - Prefer Muzzle/Magazine with bias if toggled
      - "No Optic" removes Optic from candidates (unless locked)
+     - Inside each chosen slot, prefer tagged attachments with bias
      =========================== */
   const build = useMemo(() => {
     if (!pickedWeapon) return [];
 
-    // normalized slots map like { Muzzle: [...], Barrel: [...], ... }
+    // slots map like { Muzzle: [...], Barrel: [...], ... }
     const slotsObj =
       pickedWeapon.slots && typeof pickedWeapon.slots === "object" ? pickedWeapon.slots : {};
+
     const allSlots = Object.keys(slotsObj).filter(
       (s) => Array.isArray(slotsObj[s]) && slotsObj[s].length
     );
@@ -174,28 +212,63 @@ export default function Randomizer() {
     let candidates = allSlots.filter((s) => !lockedResolved.includes(s));
 
     // honor "No Optic" *unless* Optic is locked
-    const opticIsLocked = lockedResolved.some((s) => s.toLowerCase() === "optic");
+    const opticIsLocked = lockedResolved.some((s) => normSlot(s) === "optic");
     if (noOptic && !opticIsLocked) {
-      candidates = candidates.filter((s) => s.toLowerCase() !== "optic");
+      candidates = candidates.filter((s) => normSlot(s) !== "optic");
     }
 
     const need = Math.max(0, 5 - lockedResolved.length);
 
     // bias mapping: 0–50% -> 1.0–2.0 weight multiplier
     const biasMult = 1 + preferredBias / 50;
-    const weight = (s) => (preferred.has(s.toLowerCase()) ? biasMult : 1);
 
-    const biased = weightedSampleUnique(candidates, need, buildRng, weight);
+    // slot-level weight: prefer muzzle/mag when corresponding toggle is ON
+    const slotWeight = (slotName) => {
+      const k = normSlot(slotName);
+      if (preferSuppressor && k === "muzzle")    return biasMult;
+      if (preferExtendedMag && k === "magazine") return biasMult;
+      return 1;
+    };
+
+    const biased = weightedSampleUnique(candidates, need, buildRng, slotWeight);
     const finalSlots = [...lockedResolved, ...biased].slice(0, 5);
 
-    // pick a single attachment for each chosen slot (deterministic per slot)
+    // pick an attachment for each chosen slot (deterministic per slot)
     return finalSlots.map((slot) => {
       const options = slotsObj[slot] || [];
       const rng = rngFromSeed(`${seed}|${roll}|slot:${slot}`);
-      const name = options.length ? pick(options, rng) : null;
+
+      let name = null;
+      if (options.length) {
+        const k = normSlot(slot);
+
+        // attachment-level weight: prefer suppressors/extended mags if toggled
+        const attachWeight = (optName) => {
+          let w = 1;
+          if (k === "muzzle" && preferSuppressor && hasTag(optName, "suppressor")) {
+            w = biasMult;
+          } else if (k === "magazine" && preferExtendedMag && hasTag(optName, "extended")) {
+            w = biasMult;
+          }
+          return w;
+        };
+
+        name = weightedPick(options, rng, attachWeight) || pick(options, rng);
+      }
+
       return { slot, name };
     });
-  }, [pickedWeapon, buildRng, attachmentLocks, preferred, preferredBias, noOptic, seed, roll]);
+  }, [
+    pickedWeapon,
+    buildRng,
+    attachmentLocks,
+    preferredBias,
+    noOptic,
+    seed,
+    roll,
+    preferSuppressor,
+    preferExtendedMag,
+  ]);
 
   /* ===========================
      UI actions
@@ -203,21 +276,15 @@ export default function Randomizer() {
   const rerollAll = () => setRoll((r) => r + 1);
   const rerollWeaponOnly = () => { if (!weaponLocked) setRoll((r) => r + 1); };
   const rerollSeedEntirely = () => { setSeed(randomSeed()); setRoll(0); };
+
   const toggleCat = (cat) =>
     setAllowedCats((prev) =>
       prev.includes(cat) ? prev.filter((c) => c !== cat) : [...prev, cat]
     );
+
   const toggleAttachmentLock = (slot) =>
     setAttachmentLocks((prev) => ({ ...prev, [slot]: !prev[slot] }));
-  const togglePreferredSlot = (slotType) => {
-    const key = slotType.toLowerCase();
-    setPreferred((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  };
+
   const copyPermalink = () => {
     navigator.clipboard.writeText(window.location.href);
     setToast("Link copied!");
@@ -320,132 +387,136 @@ export default function Randomizer() {
           )}
 
           {/* attachment tiles */}
-          {noPool && <div className="subtle">Enable at least one category to roll a weapon.</div>}
+{noPool && <div className="subtle">Enable at least one category to roll a weapon.</div>}
 
-          {!noPool && pickedWeapon && (
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}
-            >
-              {build.map(({ slot, name }) => (
-                <div className="card" key={slot}>
-                  <div className="row" style={{ justifyContent: "space-between" }}>
-                    <div>
-                      <div className="subtle" style={{ fontSize: 12 }}>{slot}</div>
-                      <div style={{ fontWeight: 700 }}>{name || "—"}</div>
-                    </div>
-                    <div className="row" style={{ gap: 8 }}>
-                      {/* lock/unlock this slot */}
-                      <button
-                        className={`badge ${attachmentLocks[slot] ? "on" : ""}`}
-                        onClick={() => toggleAttachmentLock(slot)}
-                        title={attachmentLocks[slot] ? "Unlock slot" : "Lock slot"}
-                        aria-pressed={!!attachmentLocks[slot]}
-                      >
-                        {attachmentLocks[slot] ? "🔒" : "🔓"}
-                      </button>
-                      {/* label if this slot is in preferred set */}
-                      {preferred.has(slot.toLowerCase()) && (
-                        <span className="badge">preferred</span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+{!noPool && pickedWeapon && (
+  <div
+    className="grid"
+    style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}
+  >
+    {build.map(({ slot, name }) => {
+      const k = normSlot(slot);
 
-        {/* Filters panel */}
-        <div className="panel">
-          {/* categories */}
+      // show badge only if attachment itself matches the preference
+      const isPreferredAttachment =
+        (k === "muzzle"   && preferSuppressor && name && hasTag(name, "suppressor")) ||
+        (k === "magazine" && preferExtendedMag && name && hasTag(name, "extended"));
+
+      return (
+        <div className="card" key={slot}>
           <div className="row" style={{ justifyContent: "space-between" }}>
-            <div style={{ fontWeight: 700 }}>Filters</div>
-            <div className="subtle">Choose categories</div>
-          </div>
-
-          <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-            {CATEGORIES.map((cat) => (
+            <div>
+              <div className="subtle" style={{ fontSize: 12 }}>{slot}</div>
+              <div style={{ fontWeight: 700 }}>{name || "—"}</div>
+            </div>
+            <div className="row" style={{ gap: 8 }}>
               <button
-                key={cat}
-                className={`badge ${allowedCats.includes(cat) ? "on" : ""}`}
-                onClick={() => toggleCat(cat)}
-                aria-pressed={allowedCats.includes(cat)}
+                className={`badge ${attachmentLocks[slot] ? "on" : ""}`}
+                onClick={() => toggleAttachmentLock(slot)}
+                title={attachmentLocks[slot] ? "Unlock slot" : "Lock slot"}
+                aria-pressed={!!attachmentLocks[slot]}
               >
-                {cat}
+                {attachmentLocks[slot] ? "🔒" : "🔓"}
               </button>
-            ))}
-          </div>
-
-          <div className="hr" style={{ margin: "12px 0" }} />
-
-          {/* preferred controls (minimal: 3 buttons) */}
-          <div className="row" style={{ justifyContent: "space-between" }}>
-            <div style={{ fontWeight: 700 }}>Preferred slots</div>
-            <div className="subtle" style={{ fontSize: 12 }}>bias only • not guaranteed</div>
-          </div>
-
-          <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
-            {/* Prefer Suppressor (Muzzle) */}
-            <button
-              className={`badge ${preferred.has("muzzle") ? "on" : ""}`}
-              onClick={() => togglePreferredSlot("Muzzle")}
-              aria-pressed={preferred.has("muzzle")}
-            >
-              Prefer Suppressor
-            </button>
-
-            {/* Prefer Extended Mag (Magazine) */}
-            <button
-              className={`badge ${preferred.has("magazine") ? "on" : ""}`}
-              onClick={() => togglePreferredSlot("Magazine")}
-              aria-pressed={preferred.has("magazine")}
-            >
-              Prefer Extended Mag
-            </button>
-
-            {/* Exclude the Optic slot entirely (unless locked) */}
-            <button
-              className={`badge ${noOptic ? "on" : ""}`}
-              onClick={() => setNoOptic((v) => !v)}
-              aria-pressed={noOptic}
-              title="Exclude the Optic slot from the 5 (locks still win)"
-            >
-              No Optic
-            </button>
-          </div>
-
-          {/* bias slider */}
-          <div className="range" style={{ marginTop: 12 }}>
-            <div className="labels">
-              <span>0%</span>
-              <span className="subtle">Bias: {preferredBias}%</span>
-              <span>50%</span>
-            </div>
-            <input
-              type="range"
-              min={0}
-              max={50}
-              step={5}
-              value={preferredBias}
-              onChange={(e) => setPreferredBias(Number(e.target.value))}
-              aria-label="Preferred slot bias"
-            />
-            <div className="subtle" style={{ fontSize: 12, marginTop: 6 }}>
-              Higher = preferred slots appear more often (never guaranteed). Locks always win.
+              {isPreferredAttachment && <span className="badge">preferred</span>}
             </div>
           </div>
         </div>
-      </div>
+      );
+    })}
+  </div>
+)}
+</div>
 
-      <Toast msg={toast} onDone={() => setToast("")} />
+{/* Filters panel */}
+<div className="panel">
+  {/* categories */}
+  <div className="row" style={{ justifyContent: "space-between" }}>
+    <div style={{ fontWeight: 700 }}>Filters</div>
+    <div className="subtle">Choose categories</div>
+  </div>
 
-      {/* Sticky mobile Randomize */}
-      <div className="mobile-fab">
-        <button className="big-randomize" onClick={rerollAll} title="Randomize">
-          <span className="icon">🎲</span> Randomize
-        </button>
-      </div>
+  <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+    {CATEGORIES.map((cat) => (
+      <button
+        key={cat}
+        className={`badge ${allowedCats.includes(cat) ? "on" : ""}`}
+        onClick={() => toggleCat(cat)}
+        aria-pressed={allowedCats.includes(cat)}
+      >
+        {cat}
+      </button>
+    ))}
+  </div>
+
+  <div className="hr" style={{ margin: "12px 0" }} />
+
+  {/* preferred controls */}
+  <div className="row" style={{ justifyContent: "space-between" }}>
+    <div style={{ fontWeight: 700 }}>Preferred attachments</div>
+    <div className="subtle" style={{ fontSize: 12 }}>bias only • not guaranteed</div>
+  </div>
+
+  <div className="row" style={{ marginTop: 8, flexWrap: "wrap", gap: 8 }}>
+    <button
+      className={`badge ${preferSuppressor ? "on" : ""}`}
+      onClick={() => setPreferSuppressor(v => !v)}
+      aria-pressed={preferSuppressor}
+      title="When MUZZLE is chosen, favor suppressors if available"
+    >
+      Suppressed Muzzle
+    </button>
+
+    <button
+      className={`badge ${preferExtendedMag ? "on" : ""}`}
+      onClick={() => setPreferExtendedMag(v => !v)}
+      aria-pressed={preferExtendedMag}
+      title="When MAGAZINE is chosen, favor extended/high-capacity options"
+    >
+      Larger Mag
+    </button>
+
+    <button
+      className={`badge ${noOptic ? "on" : ""}`}
+      onClick={() => setNoOptic(v => !v)}
+      aria-pressed={noOptic}
+      title="Exclude the Optic slot from the 5 (locks still win)"
+    >
+      No Optic
+    </button>
+  </div>
+
+  {/* bias slider */}
+  <div className="range" style={{ marginTop: 12 }}>
+    <div className="labels">
+      <span>0%</span>
+      <span className="subtle">Bias: {preferredBias}%</span>
+      <span>50%</span>
     </div>
-  );
+    <input
+      type="range"
+      min={0}
+      max={50}
+      step={5}
+      value={preferredBias}
+      onChange={(e) => setPreferredBias(Number(e.target.value))}
+      aria-label="Preferred bias (slots & attachments)"
+    />
+    <div className="subtle" style={{ fontSize: 12, marginTop: 6 }}>
+      Higher = preferred slots & attachments appear more often (never guaranteed). Locks always win.
+    </div>
+  </div>
+</div>
+</div>
+
+<Toast msg={toast} onDone={() => setToast("")} />
+
+{/* Sticky mobile Randomize */}
+<div className="mobile-fab">
+  <button className="big-randomize" onClick={rerollAll} title="Randomize">
+    <span className="icon">🎲</span> Randomize
+  </button>
+</div>
+</div>
+);
 }

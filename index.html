@@ -1,6 +1,14 @@
 <!doctype html>
 <html lang="en">
   <head>
+    <!-- GA4 -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-YLZQGKWQC"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){ dataLayer.push(arguments); }
+  gtag('js', new Date());
+  gtag('config', 'G-YLZQGKWQC', { send_page_view: false }); // SPA: we'll send page_view manually
+</script>
     <!-- Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -8,14 +16,7 @@
 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<!-- Google Analytics -->
-<script async src="https://www.googletagmanager.com/gtag/js?id=G-YLZQGKWQC"></script>
-<script>
-  window.dataLayer = window.dataLayer || [];
-  function gtag(){dataLayer.push(arguments);}
-  gtag('js', new Date());
-  gtag('config', 'G-YLZQGKWQC');
-</script>
+
     <!-- App Title & Description -->
     <title>DMZ Weapon Randomizer | Battle-Ready Builds</title>
     <meta name="description" content="Randomize weapons and attachments for DMZ. Create unpredictable, battle-torn builds and share them with your squad.">

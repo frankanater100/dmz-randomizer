@@ -1,9 +1,9 @@
 // src/App.jsx
 // -------------------------------------------------------------
-// DMZ Randomizer - App shell
-// - Keeps brand on the left, links on the right
-// - Lazy-loads routes
-// - Sends GA4 page_view on every route change
+// DMZ Randomizer — App shell
+// - Brand on the left, links on the right
+// - Lazy-load routes
+// - GA4 page_view on every route change (SPA safe)
 // -------------------------------------------------------------
 import { Routes, Route, NavLink, useLocation } from "react-router-dom";
 import { Suspense, lazy, useEffect } from "react";
@@ -15,20 +15,20 @@ const Favorites  = lazy(() => import("./pages/Favorites.jsx"));
 const Updates    = lazy(() => import("./pages/Updates.jsx"));
 const NotFound   = lazy(() => import("./pages/NotFound.jsx"));
 
-// ---------- Hook: GA4 page views ----------
+// ---------- CONFIG: GA4 Measurement ID (hardcoded on purpose) ----------
+const GA_ID = "G-YLZQGKWQCV"; // <-- YOUR REAL GA4 ID
+
+// ---------- Hook: send GA4 page views on SPA route changes ----------
 function useGAPageViews() {
   const location = useLocation();
 
   useEffect(() => {
     // If GA isn't loaded (ad blocker / local), fail silently.
-    if (!window.gtag) return;
+    if (typeof window === "undefined" || !window.gtag) return;
 
-    // If you used env (Option B), set GA_ID and use it here.
-    const GA_ID = window.__GA_ID__ || undefined; // optional – fine to omit
     const page_path = location.pathname + location.search;
-
-    // Send SPA page_view
-    window.gtag("config", GA_ID || "G-YLZQGKWQC", { page_path });
+    // Send an explicit page_view for SPA navigation
+    window.gtag("config", GA_ID, { page_path });
   }, [location]);
 }
 

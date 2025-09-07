@@ -337,3 +337,61 @@ input[type="range"]::-webkit-slider-runnable-track { height:6px; background:var(
 .badge:focus-visible, .btn:focus-visible {
   outline:2px solid var(--accent); outline-offset:2px;
 }
+/* === Animated background FX ============================================= */
+/* Respect users who prefer reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  :root{
+    --fx-drift-speed: 38s;
+    --fx-scan-speed: 10s;
+  }
+
+  /* Layer 1: drifting haze (very subtle) */
+  .fx-haze{
+    position: fixed;
+    inset: -10% -10% -10% -10%;         /* overscan so edges don’t show while moving */
+    pointer-events: none;
+    z-index: 0;                          /* stays behind the UI (your UI uses z-index:1+) */
+    background:
+      radial-gradient(1200px 720px at 18% -8%, rgba(176,152,34,.10) 0%, transparent 60%),
+      radial-gradient(900px 600px at 76% 18%, rgba(159,147,88,.10) 0%, transparent 55%),
+      radial-gradient(1400px 900px at 50% -6%, rgba(43,52,43,.30) 0%, rgba(17,26,18,.25) 58%, rgba(11,15,11,.25) 100%);
+    filter: blur(6px) saturate(1.05);
+    animation: fx-drift var(--fx-drift-speed) linear infinite alternate;
+  }
+
+  @keyframes fx-drift{
+    0%   { transform: translate3d(-1.2%, -0.8%, 0) scale(1.01); opacity: .85; }
+    100% { transform: translate3d( 1.2%,  0.8%, 0) scale(1.01); opacity: .95; }
+  }
+
+  /* Layer 2: scan sweep (greenish pass that moves vertically) */
+  .fx-scan{
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+    mix-blend-mode: overlay;
+    background:
+      linear-gradient(
+        to bottom,
+        rgba(134,242,122,0) 0%,
+        rgba(134,242,122,.10) 45%,
+        rgba(134,242,122,.18) 50%,
+        rgba(134,242,122,.10) 55%,
+        rgba(134,242,122,0) 100%
+      );
+    opacity: .35;
+    animation: fx-scan var(--fx-scan-speed) ease-in-out infinite;
+  }
+
+  @keyframes fx-scan{
+    0%   { transform: translateY(-30%); }
+    50%  { transform: translateY( 30%); }
+    100% { transform: translateY(-30%); }
+  }
+}
+
+/* Fallback when user prefers reduced motion: keep layers invisible */
+@media (prefers-reduced-motion: reduce){
+  .fx-haze, .fx-scan{ display:none !important; }
+}

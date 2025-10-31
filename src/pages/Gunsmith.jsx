@@ -1,11 +1,12 @@
 // src/pages/Gunsmith.jsx
 // -------------------------------------------------------------
-// Build-Your-Own Gunsmith
-// - Pick a base weapon
-// - Choose up to 5 attachments (max 1 per slot)
-// - Live counter, clear-all, save to Favorites
+// Build-Your-Own Gunsmith (visual polish)
+// - Weapon hero uses object-fit: contain + reveal animation
+// - Slot cards slide in with a slight stagger
+// - Selecting a slot pulses; selected cards glow
+// - 5/5 counter gives a tiny wiggle
 // -------------------------------------------------------------
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { WEAPONS } from "../data/weapons.js";
 import { addFave } from "../lib/faves.js";
 import Toast from "../components/Toast.jsx";
@@ -24,17 +25,14 @@ export default function Gunsmith() {
 
   // ---------- attachment state ----------
   // { [slotName]: "Attachment Name" | "" }
-  const initialSlots = useMemo(() => {
-    if (!weapon?.slots) return {};
-    const names = Object.keys(weapon.slots || {});
+  const [chosen, setChosen] = useState(() => {
+    const w = sortedWeapons[0];
     const obj = {};
-    for (const s of names) obj[s] = "";
+    for (const s of Object.keys(w?.slots || {})) obj[s] = "";
     return obj;
-  }, [weapon]);
+  });
 
-  const [chosen, setChosen] = useState(initialSlots);
-
-  // Reset chosen when weapon changes
+  // when weapon changes, reset slot picks
   function onChangeWeapon(e) {
     const idx = Number(e.target.value);
     setWeaponIdx(idx);
@@ -42,29 +40,39 @@ export default function Gunsmith() {
     const obj = {};
     for (const s of Object.keys(w?.slots || {})) obj[s] = "";
     setChosen(obj);
+    setRevealKey((k) => k + 1); // retrigger animations
   }
 
   // Count selected
   const selectedCount = useMemo(
-    () =>
-      Object.values(chosen).filter((v) => v && v.trim().length > 0).length,
+    () => Object.values(chosen).filter((v) => v && v.trim()).length,
     [chosen]
   );
   const remaining = Math.max(0, MAX_ATTACH - selectedCount);
 
-  // Change selection for a slot (enforce <= 5)
+  // ---------- small animation helpers ----------
+  const [revealKey, setRevealKey] = useState(0);   // changes to re-run CSS animations
+  const justPickedRef = useRef(null);              // remember last-picked slot for pulse
+
   function setSlot(slot, value) {
     setChosen((prev) => {
-      // if trying to pick a new (non-empty) value and we're at limit, block
       const was = prev[slot] || "";
       const isAdding = value && !was;
-      if (isAdding && selectedCount >= MAX_ATTACH) {
-        // Block by returning prev unchanged
-        return prev;
+      if (isAdding && selectedCount >= MAX_ATTACH) return prev; // block over 5
+      if (isAdding) {
+        justPickedRef.current = slot;             // mark for pulse
+        // also nudge reveal so the selected card animates back in subtly
+        setRevealKey((k) => k + 1);
       }
       return { ...prev, [slot]: value };
     });
   }
+
+  // Clear "just picked" after paint so pulse runs once
+  useEffect(() => {
+    const id = requestAnimationFrame(() => (justPickedRef.current = null));
+    return () => cancelAnimationFrame(id);
+  }, [revealKey]);
 
   // Clear all selections
   function clearAll() {
@@ -73,6 +81,7 @@ export default function Gunsmith() {
       for (const k of Object.keys(clone)) clone[k] = "";
       return clone;
     });
+    setRevealKey((k) => k + 1);
   }
 
   // Save to favorites
@@ -122,7 +131,7 @@ export default function Gunsmith() {
             ))}
           </select>
 
-          <div className="kbd">
+          <div className={`kbd ${remaining === 0 ? "limit-hit" : ""}`}>
             {selectedCount}/{MAX_ATTACH} selected
           </div>
 
@@ -135,15 +144,14 @@ export default function Gunsmith() {
 
         <div className="hr" style={{ margin: "12px 0" }} />
 
-        {/* hero image */}
-        {weapon && (
-  <div className="part-media" style={{ marginBottom: 12 }}>
-    {/* pick ONE class: "cover" (cropped, fills) OR "contain" (no crop, letterbox) */}
+       {/* hero image (animated, object-fit: contain) */}
+{weapon && (
+  <div className="gs-hero">
     <img
-      className="part-thumb cover"
+      key={`gs-hero-${weaponIdx}`}     // re-trigger animation when base weapon changes
       src={weapon.image || PLACEHOLDER}
       alt={weapon.name}
-      loading="lazy"
+      className="reveal-hero"
       onError={(e) => (e.currentTarget.src = PLACEHOLDER)}
     />
   </div>
@@ -156,15 +164,25 @@ export default function Gunsmith() {
             className="grid"
             style={{ gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}
           >
-            {Object.entries(weapon.slots).map(([slot, options]) => {
+            {Object.entries(weapon.slots).map(([slot, options], i) => {
               const val = chosen[slot] || "";
-              const disabledAll = remaining === 0 && !val; // block picking new if at limit
+              const disabledAll = remaining === 0 && !val;
+              const selected = !!val;
+              const justPicked = justPickedRef.current === slot;
+
               return (
-                <div className="card" key={slot}>
+                <div
+                  key={`${slot}-${weaponIdx}-${revealKey}`}
+                  className={`card slot-card reveal-card ${selected ? "selected" : ""} ${justPicked ? "just-picked" : ""}`}
+                  style={{ animationDelay: `${Math.min(i, 6) * 70}ms` }}
+                >
                   <div className="row" style={{ justifyContent: "space-between", marginBottom: 6 }}>
                     <div className="label-caps">{slot}</div>
-                    {val ? <span className="badge on">selected</span> : <span className="badge">empty</span>}
+                    <span className={`badge status-pill ${selected ? "on" : ""}`}>
+                      {selected ? "selected" : "empty"}
+                    </span>
                   </div>
+
                   <select
                     value={val}
                     onChange={(e) => setSlot(slot, e.target.value)}
@@ -180,12 +198,11 @@ export default function Gunsmith() {
                   >
                     <option value="">— none —</option>
                     {Array.isArray(options) &&
-                      options.map((name, i) => (
-                        <option key={name + i} value={name}>
-                          {name}
-                        </option>
+                      options.map((name, idx) => (
+                        <option key={name + idx} value={name}>{name}</option>
                       ))}
                   </select>
+
                   {disabledAll && !val && (
                     <div className="subtle" style={{ fontSize: 12, marginTop: 6 }}>
                       Max {MAX_ATTACH} attachments selected. Clear one to add another.

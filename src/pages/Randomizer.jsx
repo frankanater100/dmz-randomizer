@@ -15,6 +15,7 @@ import { rngFromSeed, pick, sample, randomSeed } from "../lib/rng.js";
 import { addFave } from "../lib/faves.js";
 import Toast from "../components/Toast.jsx";
 import { hasTag } from "../lib/attachTags.js";
+import { TACTICALS, LETHALS } from "../data/equipment.js";
 
 /* ===========================
    LocalStorage keys
@@ -165,6 +166,24 @@ export default function Randomizer() {
     () => (chaos ? Math.random : rngFromSeed(`${seed}|${roll}|build`)),
     [seed, roll, chaos]
   );
+  // Add after your weapon/attachment build logic
+const tacticalRng = useMemo(
+  () => (chaos ? Math.random : rngFromSeed(`${seed}|${roll}|tactical`)),
+  [seed, roll, chaos]
+);
+const lethalRng = useMemo(
+  () => (chaos ? Math.random : rngFromSeed(`${seed}|${roll}|lethal`)),
+  [seed, roll, chaos]
+);
+
+const pickedTactical = useMemo(
+  () => (TACTICALS.length ? pick(TACTICALS, tacticalRng) : null),
+  [tacticalRng]
+);
+const pickedLethal = useMemo(
+  () => (LETHALS.length ? pick(LETHALS, lethalRng) : null),
+  [lethalRng]
+);
 
   /* ===========================
      Weapon pool + picked weapon
@@ -324,7 +343,8 @@ export default function Randomizer() {
               <code className="kbd">{seed}</code>
               <span className="copy">roll #{roll}</span>
             </div>
-          </div>
+          </div>  
+          
 
           <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
             <button className="btn ghost" onClick={copyPermalink}>Copy permalink</button>
@@ -420,6 +440,7 @@ export default function Randomizer() {
               </button>
               {isPreferredAttachment && <span className="badge">preferred</span>}
             </div>
+            
           </div>
         </div>
       );
@@ -427,6 +448,21 @@ export default function Randomizer() {
   </div>
 )}
 </div>
+
+  {/* Equipment (NEW: sits above Filters) */}
+  <div className="panel">
+    <h2>Equipment</h2>
+    <div className="grid" style={{ gap: 12 }}>
+      <div className="card">
+        <div className="badge" style={{ fontSize: 12 }}>Tactical</div>
+        <div style={{ fontWeight: 700 }}>{pickedTactical || "—"}</div>
+      </div>
+      <div className="card">
+        <div className="badge" style={{ fontSize: 12 }}>Lethal</div>
+        <div style={{ fontWeight: 700 }}>{pickedLethal || "—"}</div>
+      </div>
+    </div>
+  </div>
 
 {/* Filters panel */}
 <div className="panel">

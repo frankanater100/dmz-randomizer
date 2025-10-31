@@ -384,11 +384,82 @@ input[type="range"]::-webkit-slider-runnable-track { height:6px; background:var(
     animation: fx-scan var(--fx-scan-speed) ease-in-out infinite;
   }
 
+
   @keyframes fx-scan{
     0%   { transform: translateY(-30%); }
     50%  { transform: translateY( 30%); }
     100% { transform: translateY(-30%); }
   }
+}
+/* ===== Gunsmith visuals =================================== */
+/* Hero wrapper keeps image contained and centered */
+.gs-hero{
+  margin: 8px 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg-2);
+  overflow: hidden;
+}
+.gs-hero img{
+  display:block;
+  width:100%;
+  max-height:300px;           /* tune as you like */
+  object-fit:contain;         /* <-- keeps gun fully visible */
+  padding:12px;
+}
+
+/* Slide-in for slot cards (re-used from Randomizer) */
+.reveal-card{
+  animation: cardIn .36s cubic-bezier(.2,.8,.2,1) both;
+  transform-origin: 20% 50%;
+  will-change: transform, opacity;
+}
+@keyframes cardIn{
+  from{ opacity:0; transform: translateY(8px) scale(.98); }
+  to  { opacity:1; transform: translateY(0)   scale(1); }
+}
+
+/* Subtle hero fade/zoom in */
+.reveal-hero{
+  animation: heroIn .5s ease both;
+}
+@keyframes heroIn{
+  from{ opacity:0; transform: scale(1.02) translateY(6px); filter: saturate(.9) blur(.3px); }
+  to  { opacity:1; transform: scale(1)    translateY(0);   filter:none; }
+}
+
+/* Selected slot gets a gentle glow */
+.slot-card.selected{
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset, 0 8px 24px rgba(0,0,0,.35);
+}
+
+/* Pulse the card you just picked */
+.slot-card.just-picked{
+  animation: justPick .42s ease both;
+}
+@keyframes justPick{
+  0%  { transform: scale(.99); box-shadow: 0 0 0 0 rgba(134,242,122,.0); }
+  40% { transform: scale(1.01); box-shadow: 0 0 0 6px rgba(134,242,122,.20); }
+  100%{ transform: scale(1);    box-shadow: 0 0 0 0 rgba(134,242,122,.0); }
+}
+
+/* Status pill (selected/empty) – tiny style polish */
+.status-pill{ pointer-events:none }
+
+/* Counter wiggle when you hit 5/5 */
+.kbd.limit-hit{
+  animation: wiggle .45s ease;
+  border-color: var(--accent);
+  color: var(--text);
+}
+@keyframes wiggle{
+  0%{ transform: rotate(0) }
+  20%{ transform: rotate(-5deg) }
+  40%{ transform: rotate(5deg) }
+  60%{ transform: rotate(-2deg) }
+  80%{ transform: rotate(2deg) }
+  100%{ transform: rotate(0) }
 }
 
 /* Fallback when user prefers reduced motion: keep layers invisible */

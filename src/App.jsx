@@ -6,7 +6,7 @@ import { Suspense, lazy } from "react";
 const Randomizer = lazy(() => import("./pages/Randomizer.jsx"));
 const Gunsmith   = lazy(() => import("./pages/Gunsmith.jsx")); // ⬅️ new
 const Favorites  = lazy(() => import("./pages/Favorites.jsx"));
-const Updates    = lazy(() => import("./pages/Updates.jsx"));
+const WallOfShame = lazy(() => import("./pages/WallOfShame.jsx"));
 const NotFound   = lazy(() => import("./pages/NotFound.jsx"));
 
 export default function App() {
@@ -27,7 +27,7 @@ export default function App() {
             <NavLink to="/"          className="navlink" end>Randomizer</NavLink>
             <NavLink to="/gunsmith"  className="navlink">Gunsmith</NavLink>
             <NavLink to="/favorites" className="navlink">Favorites</NavLink>
-            <NavLink to="/updates"   className="navlink">Updates</NavLink>
+            <NavLink to="/wall-of-shame" className="navlink">Wall of Shame</NavLink>
           </div>
         </nav>
       </header>
@@ -39,7 +39,7 @@ export default function App() {
             <Route path="/"          element={<Randomizer />} />
             <Route path="/gunsmith"  element={<Gunsmith />} />
             <Route path="/favorites" element={<Favorites />} />
-            <Route path="/updates"   element={<Updates />} />
+            <Route path="/wall-of-shame" element={<WallOfShame />} />
             <Route path="*"          element={<NotFound />} />
           </Routes>
         </Suspense>

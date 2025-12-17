@@ -466,3 +466,19 @@ input[type="range"]::-webkit-slider-runnable-track { height:6px; background:var(
 @media (prefers-reduced-motion: reduce){
   .fx-haze, .fx-scan{ display:none !important; }
 }
+/* === Wall of Shame (3 columns) =================== */
+.shame-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 780px) {
+  .shame-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.shame-card {
+  text-align: left;
+}

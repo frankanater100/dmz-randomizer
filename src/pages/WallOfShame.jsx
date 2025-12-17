@@ -74,11 +74,9 @@ export default function WallOfShame() {
       if (!payload.title) throw new Error("Missing name");
       if (!payload.body) throw new Error("Missing reason");
 
-      const res = await fetch(WEBAPP_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
+     const res = await fetch("/api/wall-of-shame");
+const data = await res.json();
+setRows(Array.isArray(data) ? data : []);
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 

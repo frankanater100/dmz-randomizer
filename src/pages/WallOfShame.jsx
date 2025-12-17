@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 // Same exact “old update system” env var used in Updates.jsx  [oai_citation:1‡Updates.jsx](file-service://file-GskcJ5L59FJNQ1MtDdR7zH)
-const WEBAPP_URL = import.meta.env.VITE_GOOGLE_WEBAPP_URL;
+const res = await fetch(`/api/wall-of-shame?ts=${Date.now()}`);
 
 export default function WallOfShame() {
   const [entries, setEntries] = useState(null); // null = loading

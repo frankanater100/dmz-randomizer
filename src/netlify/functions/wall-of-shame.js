@@ -1,57 +1,100 @@
 // src/pages/WallOfShame.jsx
 import { useEffect, useState } from "react";
 
+/**
+ * ✅ NETLIFY VERSION
+ * Frontend talks ONLY to Netlify Functions:
+ *   GET  /.netlify/functions/wall-of-shame
+ *   POST /.netlify/functions/wall-of-shame
+ *
+ * No direct Google Apps Script fetch (avoids CORS).
+ */
+
+// ---------- Constants ----------
+const WALL_FN_URL = "/.netlify/functions/wall-of-shame";
+
 export default function WallOfShame() {
-  // ---- STATE: feed ----
+  // =========================
+  // STATE: feed (read)
+  // =========================
   const [rows, setRows] = useState(null); // null = loading
   const [loadErr, setLoadErr] = useState("");
 
-  // ---- STATE: add entry ----
+  // =========================
+  // STATE: form (post)
+  // =========================
   const [name, setName] = useState("");
   const [reason, setReason] = useState("");
   const [author, setAuthor] = useState("");
-  const [sending, setSending] = useState(false);
-  const [ok, setOk] = useState(false);
-  const [err, setErr] = useState("");
 
-  // ---- HELPERS ----
-  async function loadRows() {
+  const [sending, setSending] = useState(false);
+  const [postOk, setPostOk] = useState(false);
+  const [postErr, setPostErr] = useState("");
+
+  // =========================
+  // HELPERS
+  // =========================
+  async function loadWall() {
     try {
-      const res = await fetch(`/api/wall-of-shame?ts=${Date.now()}`);
+      setLoadErr("");
+
+      const res = await fetch(`${WALL_FN_URL}?ts=${Date.now()}`, {
+        method: "GET",
+      });
+
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const data = await res.json();
       setRows(Array.isArray(data) ? data : []);
-      setLoadErr("");
     } catch (e) {
-      console.error("WallOfShame fetch failed:", e);
+      console.error("Wall of Shame load failed:", e);
       setRows([]);
       setLoadErr("Couldn’t load the Wall of Shame right now.");
     }
   }
 
-  // ---- EFFECT: fetch from OUR API (NOT Google) ----
+  function normalizeName(row) {
+    // Handles header/key differences if your sheet changes later
+    return (
+      row?.title ??
+      row?.Title ??
+      row?.name ??
+      row?.Name ??
+      row?.player ??
+      row?.Player ??
+      ""
+    );
+  }
+
+  // =========================
+  // EFFECTS
+  // =========================
   useEffect(() => {
-    loadRows();
+    loadWall();
   }, []);
 
-  // ---- HANDLER: post new entry via OUR API (NOT Google) ----
+  // =========================
+  // HANDLERS
+  // =========================
   async function handleAdd(e) {
     e.preventDefault();
+
     setSending(true);
-    setErr("");
-    setOk(false);
+    setPostOk(false);
+    setPostErr("");
 
     try {
       const payload = {
-        title: name.trim(),   // player name
-        body: reason.trim(),  // reason
-        author: author.trim() // optional
+        // Apps Script expects these keys:
+        title: name.trim(), // player name
+        body: reason.trim(), // reason
+        author: author.trim(), // optional
       };
 
       if (!payload.title) throw new Error("Missing name");
       if (!payload.body) throw new Error("Missing reason");
 
-      const res = await fetch("/api/wall-of-shame", {
+      const res = await fetch(WALL_FN_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -59,23 +102,31 @@ export default function WallOfShame() {
 
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
 
-      setOk(true);
+      setPostOk(true);
       setName("");
       setReason("");
       setAuthor("");
 
-      // refresh list
-      await loadRows();
+      // Refresh list after posting
+      await loadWall();
     } catch (e) {
-      console.error(e);
-      setErr("Could not post right now.");
+      console.error("Wall of Shame post failed:", e);
+      setPostErr("Could not post right now.");
     } finally {
       setSending(false);
+      // auto-hide success after a moment
+      setTimeout(() => setPostOk(false), 2000);
     }
   }
 
+  // =========================
+  // UI
+  // =========================
   return (
     <div className="grid" style={{ gap: 16 }}>
+      {/* =======================
+          PANEL: LIST
+         ======================= */}
       <div className="panel">
         <h2>Wall of Shame</h2>
 
@@ -97,24 +148,29 @@ export default function WallOfShame() {
               <thead>
                 <tr>
                   <th style={{ textAlign: "left", padding: 10 }}>Name</th>
-                  <th style={{ textAlign: "left", padding: 10, whiteSpace: "nowrap" }}>Timestamp</th>
+                  <th style={{ textAlign: "left", padding: 10, whiteSpace: "nowrap" }}>
+                    Timestamp
+                  </th>
                   <th style={{ textAlign: "left", padding: 10 }}>Reason</th>
                 </tr>
               </thead>
+
               <tbody>
                 {rows.map((r, i) => {
-                  const playerName = r.title ?? r.Title ?? r.name ?? r.Name ?? "";
+                  const playerName = normalizeName(r);
                   return (
-                    <tr key={`${playerName}-${i}`}>
-                      <td style={{ padding: 10, fontWeight: 700, whiteSpace: "nowrap" }}>
+                    <tr key={`${playerName || "row"}-${i}`}>
+                      <td style={{ padding: 10, fontWeight: 800, whiteSpace: "nowrap" }}>
                         {playerName}
                       </td>
+
                       <td style={{ padding: 10, whiteSpace: "nowrap" }}>
-                        <span className="kbd">{r.date || ""}</span>
+                        <span className="kbd">{r?.date || ""}</span>
                       </td>
+
                       <td style={{ padding: 10 }}>
-                        {r.body}
-                        {r.author ? (
+                        {r?.body || ""}
+                        {r?.author ? (
                           <div className="subtle" style={{ marginTop: 6, fontSize: 12 }}>
                             — {r.author}
                           </div>
@@ -129,6 +185,9 @@ export default function WallOfShame() {
         )}
       </div>
 
+      {/* =======================
+          PANEL: ADD FORM
+         ======================= */}
       <div className="panel">
         <h2>Add to Wall</h2>
 
@@ -160,15 +219,17 @@ export default function WallOfShame() {
             <div className="subtle" style={{ fontSize: 12 }}>
               Timestamp is added automatically.
             </div>
+
             <button className="btn accent" disabled={sending}>
               {sending ? "Posting…" : "Post"}
             </button>
           </div>
 
-          {ok && <div className="badge on">Posted.</div>}
-          {err && (
+          {postOk && <div className="badge on">Posted.</div>}
+
+          {postErr && (
             <div className="badge" style={{ borderColor: "#d66", color: "#ffdede" }}>
-              {err}
+              {postErr}
             </div>
           )}
         </form>
